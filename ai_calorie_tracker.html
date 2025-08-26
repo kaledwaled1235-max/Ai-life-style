@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Calorie & Macro Tracker (MVP) — Monochrome</title>
+<style>
+:root{
+  /* Monochrome palette */
+  --bg:#ffffff; --card:#ffffff; --ink:#000000; --sub:#444444;
+  --brand:#000000; --ok:#000000; --warn:#000000; --danger:#000000;
+  --muted:#d0d0d0;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+  background:#fff; color:var(--ink);
+}
+.container{max-width:980px;margin:0 auto;padding:16px}
+.card{
+  background:var(--card); border:1px solid var(--muted);
+  box-shadow:none; border-radius:18px; padding:16px; margin:12px 0;
+}
+h1,h2,h3{margin:8px 0}
+h1{font-size:clamp(22px,3.8vw,30px)}
+h2{font-size:clamp(18px,3.2vw,24px)}
+.sub{color:var(--sub)}
+.row{display:flex; gap:12px; flex-wrap:wrap}
+.col{flex:1 1 260px}
+label{display:block; font-weight:600; margin:6px 0}
+input,select,button,textarea{
+  width:100%; padding:12px; border-radius:12px; border:1px solid var(--muted);
+  font-size:16px; background:#fff; color:var(--ink);
+}
+button{background:var(--brand); color:#fff; border:1px solid #000; cursor:pointer; font-weight:700}
+button.ghost{background:#fff; color:#000}
+button.warn{background:#fff; color:#000}
+button.ok{background:#000; color:#fff}
+button.danger{background:#000; color:#fff}
+button:active{transform:scale(.99)}
+.toolbar{display:flex; gap:8px; flex-wrap:wrap}
+nav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px}
+nav button{flex:1 1 120px}
+.badge{display:inline-block; padding:4px 10px; border-radius:999px; background:#f4f4f4; color:#000}
+.small{font-size:13px; color:var(--sub)}
+hr{border:none; border-top:1px dashed var(--muted); margin:12px 0}
+table{width:100%; border-collapse:collapse}
+th,td{border-bottom:1px solid #e5e7eb; padding:8px; text-align:center}
+tfoot td{font-weight:800}
+.kpi{display:flex; gap:10px; flex-wrap:wrap}
+.kpi .card{flex:1 1 200px; text-align:center}
+.center{text-align:center}
+.hidden{display:none}
+.flex{display:flex; gap:8px; align-items:center}
+.flex-col{display:flex; gap:8px; flex-direction:column}
+progress{width:100%; height:16px}
+.tag{display:inline-block;padding:2px 8px;border-radius:8px;background:#eee;margin:2px;font-size:12px;border:1px solid #ccc}
+.meal-item{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid #e5e7eb;padding:8px;border-radius:12px}
+.meal-item strong{flex:1}
+.meal-item input{width:90px}
+footer{padding:24px 0;color:#666;text-align:center}
+/* Camera */
+.camera{background:#fff;color:#000;border-radius:16px;padding:12px;border:1px solid #dcdcdc}
+video,canvas{width:100%;border-radius:12px;background:#000}
+.pred{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+/* Wizard steps */
+.stepper{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.step{flex:1;height:6px;background:#e2e2e2;border-radius:99px;position:relative}
+.step.done{background:#9e9e9e}
+.step.active{background:#000}
+/* Water tracker */
+.cups{display:flex;gap:6px;flex-wrap:wrap}
+.cup{width:44px;height:60px;border:2px solid #000;border-radius:10px;position:relative;overflow:hidden;cursor:pointer;background:#fff}
+.cup.fill::after{content:"";position:absolute;bottom:0;left:0;width:100%;height:70%;background:#000}
+/* Utility */
+.lang-switch{min-width:180px}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="card">
+    <div class="row" style="align-items:center">
+      <div class="col" style="flex:1 1 auto">
+        <h1 id="appTitle">AI Calorie & Macro Tracker</h1>
+        <div class="small" id="subtitle">MVP — on‑device mock AI + manual adjust. Data saved locally.</div>
+      </div>
+      <div class="col" style="max-width:260px">
+        <label id="langLabel">Language</label>
+        <select id="langSelect" class="lang-switch"></select>
+      </div>
+    </div>
+  </div>
+
+  <nav id="nav" class="card hidden">
+    <button data-tab="home">Home</button>
+    <button data-tab="goals">Daily Goals</button>
+    <button data-tab="camera">Camera</button>
+    <button data-tab="log">Food Log</button>
+    <button data-tab="water">Water</button>
+    <button data-tab="profile">Profile</button>
+    <button data-tab="about">About</button>
+  </nav>
+
+  <!-- Onboarding Wizard -->
+  <div id="wizard" class="card">
+    <div class="stepper">
+      <div class="step active" id="s1"></div>
+      <div class="step" id="s2"></div>
+      <div class="step" id="s3"></div>
+    </div>
+    <div id="step1">
+      <h2 id="wTitle">Choose Language</h2>
+      <div class="row">
+        <div class="col">
+          <label id="wLangLabel">Language</label>
+          <select id="wLangSelect"></select>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="next1">Next</button>
+      </div>
+    </div>
+
+    <div id="step2" class="hidden">
+      <h2>Profile</h2>
+      <div class="row">
+        <div class="col">
+          <label>Sex</label>
+          <select id="sex">
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Age (years)</label>
+          <input id="age" type="number" min="8" max="100" value="16">
+        </div>
+        <div class="col">
+          <label>Height (cm)</label>
+          <input id="height" type="number" min="100" max="230" value="180">
+        </div>
+        <div class="col">
+          <label>Weight (kg)</label>
+          <input id="weight" type="number" min="30" max="200" value="75">
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="ghost" id="back2">Back</button>
+        <button id="next2">Next</button>
+      </div>
+    </div>
+
+    <div id="step3" class="hidden">
+      <h2>Activity</h2>
+      <div class="row">
+        <div class="col">
+          <label>Workout days/week</label>
+          <input id="days" type="number" min="0" max="7" value="3">
+        </div>
+        <div class="col">
+          <label>Goal</label>
+          <select id="goal">
+            <option value="maintain">Maintain</option>
+            <option value="cut">Cut (-15%)</option>
+            <option value="bulk">Bulk (+10%)</option>
+          </select>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button class="ghost" id="back3">Back</button>
+        <button id="finish">Finish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Home / Dashboard -->
+  <div id="home" class="card hidden">
+    <h2 id="dashTitle">Dashboard</h2>
+    <div class="kpi">
+      <div class="card">
+        <div class="small" data-i18n="calToday">Calories Today</div>
+        <div id="kcalToday" style="font-size:28px;font-weight:800">0</div>
+        <div class="small">Target: <span id="kcalTarget">0</span></div>
+        <progress id="kcalProg" max="100" value="0"></progress>
+      </div>
+      <div class="card">
+        <div class="small">Protein (g)</div>
+        <div id="protToday" style="font-size:28px;font-weight:800">0</div>
+        <div class="small">Target: <span id="protTarget">0</span></div>
+        <progress id="protProg" max="100" value="0"></progress>
+      </div>
+      <div class="card">
+        <div class="small">Fat (g)</div>
+        <div id="fatToday" style="font-size:28px;font-weight:800">0</div>
+        <div class="small">Target: <span id="fatTarget">0</span></div>
+        <progress id="fatProg" max="100" value="0"></progress>
+      </div>
+      <div class="card">
+        <div class="small">Carbs (g)</div>
+        <div id="carbToday" style="font-size:28px;font-weight:800">0</div>
+        <div class="small">Target: <span id="carbTarget">0</span></div>
+        <progress id="carbProg" max="100" value="0"></progress>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col">
+        <div class="badge">Streak: <span id="streak">0</span> 🔥</div>
+      </div>
+      <div class="col center">
+        <button id="toCamera">Open Camera</button>
+      </div>
+      <div class="col center">
+        <button class="ghost" id="toLog">Open Food Log</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Goals -->
+  <div id="goals" class="card hidden">
+    <h2>Daily Goals</h2>
+    <div class="row">
+      <div class="col"><label>Calories</label><input id="g_kcal" type="number"></div>
+      <div class="col"><label>Protein (g)</label><input id="g_prot" type="number"></div>
+      <div class="col"><label>Fat (g)</label><input id="g_fat" type="number"></div>
+      <div class="col"><label>Carbs (g)</label><input id="g_carb" type="number"></div>
+    </div>
+    <div class="toolbar">
+      <button id="saveGoals" class="ok">Save</button>
+      <button id="recalcGoals" class="ghost">Recalculate from Profile</button>
+    </div>
+  </div>
+
+  <!-- Camera Page -->
+  <div id="camera" class="card hidden">
+    <h2>Camera (Beta)</h2>
+    <div class="camera">
+      <video id="vid" autoplay playsinline muted></video>
+      <div class="toolbar">
+        <button id="startCam">Start Camera</button>
+        <button id="snap" class="ghost">Capture</button>
+        <button id="classify" class="ok">AI Guess</button>
+      </div>
+      <canvas id="frame" class="hidden"></canvas>
+      <div class="pred" id="pred"></div>
+    </div>
+    <hr>
+    <h3>Add to Meal</h3>
+    <div class="row">
+      <div class="col">
+        <label>Food</label>
+        <input id="foodSearch" placeholder="Search or pick AI guess..." list="foodList">
+        <datalist id="foodList"></datalist>
+        <div class="small" id="foodHint">Examples: rice, chicken breast, apple, pizza</div>
+      </div>
+      <div class="col">
+        <label>Portion (g)</label>
+        <input id="portion" type="number" value="150">
+      </div>
+      <div class="col">
+        <label>Meal</label>
+        <select id="mealType">
+          <option>Breakfast</option>
+          <option>Lunch</option>
+          <option>Dinner</option>
+          <option>Snack</option>
+        </select>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button id="addMeal">Add to Log</button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div id="log" class="card hidden">
+    <h2>Food Log — <span id="logDate"></span></h2>
+    <div id="logItems"></div>
+    <hr>
+    <table>
+      <thead><tr><th>Meal</th><th>Food</th><th>g</th><th>kcal</th><th>P</th><th>F</th><th>C</th><th></th></tr></thead>
+      <tbody id="logTable"></tbody>
+      <tfoot><tr><td colspan="3">Totals</td><td id="tKcal">0</td><td id="tP">0</td><td id="tF">0</td><td id="tC">0</td><td></td></tr></tfoot>
+    </table>
+    <div class="toolbar">
+      <button id="clearToday" class="danger">Clear Today</button>
+    </div>
+  </div>
+
+  <!-- Water -->
+  <div id="water" class="card hidden">
+    <h2>Water Tracker</h2>
+    <div class="row">
+      <div class="col">
+        <label>Daily target (ml)</label>
+        <input id="waterTarget" type="number" value="2500">
+        <div class="small">Tip: ~35 ml per kg</div>
+      </div>
+      <div class="col">
+        <label>Cup size (ml)</label>
+        <input id="cupSize" type="number" value="250">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button id="saveWater" class="ok">Save</button>
+      <button id="drink">Drink 1 cup</button>
+      <button id="resetWater" class="ghost">Reset Today</button>
+    </div>
+    <div class="row">
+      <div class="col">
+        <div>Progress: <span id="waterProgTxt">0 / 0 ml</span></div>
+        <progress id="waterProg" max="100" value="0"></progress>
+      </div>
+    </div>
+    <div class="cups" id="cups"></div>
+  </div>
+
+  <!-- Profile -->
+  <div id="profile" class="card hidden">
+    <h2>Profile</h2>
+    <div id="profSummary"></div>
+    <div class="toolbar"><button id="restart" class="warn">Restart Wizard</button></div>
+  </div>
+
+  <!-- About -->
+  <div id="about" class="card hidden">
+    <h2>About</h2>
+    <p>This MVP runs fully in your browser. AI detection uses a generic MobileNet image classifier (best‑effort). Always adjust items/portions manually for accuracy.</p>
+    <p>Data is stored locally (this device only).</p>
+  </div>
+
+  <footer>© 2025 — MVP built for you. Monochrome edition.</footer>
+</div>
+
+<!-- TF.js & MobileNet -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.12.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0"></script>
+
+<script>
+// ====== i18n (expanded & usable) ======
+const I18N = {
+  en:{title:"AI Calorie & Macro Tracker", next:"Next", back:"Back", finish:"Finish", home:"Home", goals:"Daily Goals", camera:"Camera", log:"Food Log", water:"Water", profile:"Profile", about:"About", chooseLang:"Choose Language", language:"Language", hint:"Examples: rice, chicken breast, apple, pizza"},
+  ar:{title:"حساب السعرات والماكروز بالذكاء الاصطناعي", next:"التالي", back:"رجوع", finish:"إنهاء", home:"الرئيسية", goals:"الأهداف اليومية", camera:"الكاميرا", log:"سجل الأكل", water:"الماء", profile:"الملف", about:"عن التطبيق", chooseLang:"اختر اللغة", language:"اللغة", hint:"أمثلة: أرز، صدر دجاج، تفاح، بيتزا"},
+  fr:{title:"Suivi Calories & Macros IA", next:"Suivant", back:"Retour", finish:"Terminer", home:"Accueil", goals:"Objectifs", camera:"Caméra", log:"Journal", water:"Eau", profile:"Profil", about:"À propos", chooseLang:"Choisir la langue", language:"Langue", hint:"Exemples : riz, blanc de poulet, pomme, pizza"},
+  es:{title:"Contador de Calorías y Macros IA", next:"Siguiente", back:"Atrás", finish:"Finalizar", home:"Inicio", goals:"Objetivos", camera:"Cámara", log:"Registro", water:"Agua", profile:"Perfil", about:"Acerca de", chooseLang:"Elegir idioma", language:"Idioma", hint:"Ejemplos: arroz, pechuga de pollo, manzana, pizza"}
+};
+const LANGS = [
+  {k:'ar',label:'العربية'}, {k:'en',label:'English'}, {k:'fr',label:'Français'}, {k:'es',label:'Español'}
+];
+let LANG = 'ar';
+
+function fillLangSelects(){
+  const selects=[document.getElementById('langSelect'), document.getElementById('wLangSelect')];
+  selects.forEach(sel=>{ sel.innerHTML=''; LANGS.forEach(({k,label})=>{ const o=document.createElement('option'); o.value=k; o.textContent=label; sel.appendChild(o); }); });
+}
+
+function setLang(k){
+  LANG = k; const T = I18N[k]||I18N.en;
+  document.getElementById('appTitle').textContent = T.title;
+  document.getElementById('wTitle').textContent = T.chooseLang;
+  document.getElementById('langLabel').textContent = T.language;
+  document.getElementById('wLangLabel').textContent = T.language;
+  document.querySelectorAll('#nav button').forEach(b=>{ const key=b.dataset.tab; if(T[key]) b.textContent=T[key]; });
+  document.getElementById('foodHint').textContent = T.hint;
+  // dir
+  document.documentElement.dir = (k==='ar') ? 'rtl' : 'ltr';
+  document.documentElement.lang = k;
+  // set selects
+  document.getElementById('langSelect').value = k;
+  document.getElementById('wLangSelect').value = k;
+}
+
+// ====== State & Storage ======
+const SKEY = 'mvp_tracker_state_v2_mono';
+let state = JSON.parse(localStorage.getItem(SKEY)||'{}');
+function save(){ localStorage.setItem(SKEY, JSON.stringify(state)); }
+
+// ====== Wizard logic ======
+const step1 = document.getElementById('step1');
+const step2 = document.getElementById('step2');
+const step3 = document.getElementById('step3');
+function markSteps(a,b,c){
+  document.getElementById('s1').className='step'+(a?' active done':'');
+  document.getElementById('s2').className='step'+(b?' active done':'');
+  document.getElementById('s3').className='step'+(c?' active done':'');
+}
+
+document.getElementById('next1').onclick = ()=>{
+  const lang = document.getElementById('wLangSelect').value; setLang(lang);
+  state.lang = lang; save();
+  step1.classList.add('hidden'); step2.classList.remove('hidden'); markSteps(false,true,false);
+};
+
+document.getElementById('langSelect').onchange = (e)=>{ setLang(e.target.value); state.lang=e.target.value; save(); };
+
+document.getElementById('back2').onclick = ()=>{ step2.classList.add('hidden'); step1.classList.remove('hidden'); markSteps(true,false,false); };
+
+document.getElementById('next2').onclick = ()=>{
+  state.sex = document.getElementById('sex').value;
+  state.age = +document.getElementById('age').value;
+  state.height = +document.getElementById('height').value;
+  state.weight = +document.getElementById('weight').value;
+  save();
+  step2.classList.add('hidden'); step3.classList.remove('hidden'); markSteps(false,false,true);
+};
+
+document.getElementById('back3').onclick = ()=>{ step3.classList.add('hidden'); step2.classList.remove('hidden'); markSteps(false,true,false); };
+
+document.getElementById('finish').onclick = ()=>{
+  state.days = +document.getElementById('days').value;
+  state.goal = document.getElementById('goal').value;
+  calcGoalsFromProfile();
+  save();
+  document.getElementById('wizard').classList.add('hidden');
+  document.getElementById('nav').classList.remove('hidden');
+  showTab('home');
+};
+
+// ====== Tabs ======
+const tabs = ['home','goals','camera','log','water','profile','about'];
+document.getElementById('nav').addEventListener('click', (e)=>{
+  if(e.target.tagName!=='BUTTON') return;
+  showTab(e.target.dataset.tab);
+});
+function showTab(id){
+  tabs.forEach(t=>document.getElementById(t).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+  if(id==='home') refreshDashboard();
+  if(id==='log') refreshLog();
+  if(id==='water') refreshWaterUI();
+  if(id==='profile') renderProfile();
+}
+document.getElementById('toCamera').onclick=()=>showTab('camera');
+document.getElementById('toLog').onclick=()=>showTab('log');
+
+// ====== Calculations ======
+function activityFactor(days){
+  if(days<=0) return 1.2;
+  if(days<=2) return 1.375;
+  if(days<=4) return 1.55;
+  if(days<=6) return 1.725;
+  return 1.9;
+}
+function calcTDEE(){
+  const w=state.weight||70, h=state.height||175, a=state.age||25, s=state.sex||'male', d=state.days||3;
+  const bmr = (s==='male') ? (10*w + 6.25*h - 5*a + 5) : (10*w + 6.25*h - 5*a - 161);
+  let tdee = bmr * activityFactor(d);
+  if(state.goal==='cut') tdee *= 0.85;
+  if(state.goal==='bulk') tdee *= 1.10;
+  return Math.round(tdee);
+}
+function calcMacros(){
+  const kcal = calcTDEE();
+  const prot = Math.round((state.weight||70) * 1.8); // g
+  const fat = Math.round((state.weight||70) * 0.9); // g
+  let restK = kcal - (prot*4 + fat*9);
+  const carb = Math.max(0, Math.round(restK/4));
+  return {kcal, prot, fat, carb};
+}
+function calcGoalsFromProfile(){
+  const m = calcMacros();
+  state.goals = m; save();
+  fillGoals();
+}
+
+// ====== Goals UI ======
+function fillGoals(){
+  const g = state.goals || calcMacros();
+  ['kcal','prot','fat','carb'].forEach(k=>{ document.getElementById('g_'+k).value = g[k]; });
+  refreshDashboard();
+}
+document.getElementById('saveGoals').onclick = ()=>{
+  state.goals = {
+    kcal:+document.getElementById('g_kcal').value,
+    prot:+document.getElementById('g_prot').value,
+    fat:+document.getElementById('g_fat').value,
+    carb:+document.getElementById('g_carb').value
+  };
+  save(); refreshDashboard();
+};
+document.getElementById('recalcGoals').onclick = ()=>{ calcGoalsFromProfile(); };
+
+// ====== Dashboard ======
+function todayKey(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function getDay(day=todayKey()){ state.daysData = state.daysData||{}; return (state.daysData[day]=state.daysData[day]||{meals:[], water:0}); }
+function sumDay(day=todayKey()){ const obj = getDay(day); return obj.meals.reduce((acc,m)=>{ acc.kcal += m.kcal; acc.prot += m.prot; acc.fat += m.fat; acc.carb += m.carb; return acc; }, {kcal:0,prot:0,fat:0,carb:0}); }
+function refreshDashboard(){
+  const g = state.goals || calcMacros();
+  const s = sumDay();
+  document.getElementById('kcalToday').textContent = Math.round(s.kcal);
+  document.getElementById('protToday').textContent = Math.round(s.prot);
+  document.getElementById('fatToday').textContent = Math.round(s.fat);
+  document.getElementById('carbToday').textContent = Math.round(s.carb);
+  document.getElementById('kcalTarget').textContent = g.kcal;
+  document.getElementById('protTarget').textContent = g.prot;
+  document.getElementById('fatTarget').textContent = g.fat;
+  document.getElementById('carbTarget').textContent = g.carb;
+  document.getElementById('kcalProg').value = Math.min(100, (s.kcal/g.kcal)*100);
+  document.getElementById('protProg').value = Math.min(100, (s.prot/g.prot)*100);
+  document.getElementById('fatProg').value = Math.min(100, (s.fat/g.fat)*100);
+  document.getElementById('carbProg').value = Math.min(100, (s.carb/g.carb)*100);
+  updateStreak();
+}
+
+// ====== Foods DB (seed) per 100g ======
+const SEED_FOODS = [
+{name:"white rice", ar:"رز أبيض مطبوخ", kcal:130, prot:2.4, fat:0.3, carb:28.7},
+{name:"brown rice", ar:"رز بني", kcal:123, prot:2.7, fat:1.0, carb:25.6},
+{name:"grilled chicken breast", ar:"صدر دجاج مشوي", kcal:165, prot:31, fat:3.6, carb:0},
+{name:"beef steak lean", ar:"ستيك بقري قليل الدهن", kcal:187, prot:27, fat:8, carb:0},
+{name:"ground beef 80/20", ar:"لحمة مفرومة 20% دهن", kcal:254, prot:17, fat:20, carb:0},
+{name:"lamb", ar:"لحم ضأن", kcal:258, prot:25, fat:17, carb:0},
+{name:"salmon", ar:"سالمون", kcal:208, prot:20, fat:13, carb:0},
+{name:"tuna canned water", ar:"تونة معلبة", kcal:132, prot:29, fat:1, carb:0},
+{name:"eggs", ar:"بيض", kcal:155, prot:13, fat:11, carb:1.1},
+{name:"egg whites", ar:"بياض بيض", kcal:52, prot:11, fat:0.2, carb:0.7},
+{name:"whole milk", ar:"حليب كامل الدسم", kcal:61, prot:3.2, fat:3.3, carb:4.8},
+{name:"yogurt plain", ar:"زبادي سادة", kcal:59, prot:10, fat:0.4, carb:3.6},
+{name:"cheddar cheese", ar:"جبنة شيدر", kcal:403, prot:25, fat:33, carb:1.3},
+{name:"olive oil", ar:"زيت زيتون", kcal:884, prot:0, fat:100, carb:0},
+{name:"bread white", ar:"خبز أبيض", kcal:265, prot:9, fat:3.2, carb:49},
+{name:"bread whole wheat", ar:"خبز قمح كامل", kcal:247, prot:12, fat:3.4, carb:41},
+{name:"pasta cooked", ar:"مكرونة مطبوخة", kcal:131, prot:5, fat:1.1, carb:25},
+{name:"oats dry", ar:"شوفان", kcal:389, prot:17, fat:7, carb:66},
+{name:"banana", ar:"موز", kcal:89, prot:1.1, fat:0.3, carb:23},
+{name:"apple", ar:"تفاح", kcal:52, prot:0.3, fat:0.2, carb:14},
+{name:"orange", ar:"برتقال", kcal:47, prot:0.9, fat:0.1, carb:12},
+{name:"dates", ar:"بلح", kcal:282, prot:2.5, fat:0.4, carb:75},
+{name:"potato boiled", ar:"بطاطس مسلوقة", kcal:87, prot:1.9, fat:0.1, carb:20},
+{name:"sweet potato", ar:"بطاطا", kcal:86, prot:1.6, fat:0.1, carb:20},
+{name:"broccoli", ar:"بروكلي", kcal:34, prot:2.8, fat:0.4, carb:7},
+{name:"cucumber", ar:"خيار", kcal:16, prot:0.7, fat:0.1, carb:3.6},
+{name:"tomato", ar:"طماطم", kcal:18, prot:0.9, fat:0.2, carb:3.9},
+{name:"lettuce", ar:"خس", kcal:15, prot:1.4, fat:0.2, carb:2.9},
+{name:"chickpeas boiled", ar:"حمص مسلوق", kcal:164, prot:9, fat:2.6, carb:27},
+{name:"beans fava cooked", ar:"فول", kcal:110, prot:7.6, fat:0.4, carb:19.7},
+{name:"hummus dip", ar:"حمص بطحينة", kcal:166, prot:8, fat:9.6, carb:14},
+{name:"tahini", ar:"طحينة", kcal:595, prot:17, fat:53, carb:21},
+{name:"peanut butter", ar:"زبدة فول سوداني", kcal:588, prot:25, fat:50, carb:20},
+{name:"almonds", ar:"لوز", kcal:579, prot:21, fat:50, carb:22},
+{name:"walnuts", ar:"جوز", kcal:654, prot:15, fat:65, carb:14},
+{name:"white fish", ar:"سمك أبيض", kcal:96, prot:20, fat:1.5, carb:0},
+{name:"shrimp", ar:"جمبري", kcal:99, prot:24, fat:0.3, carb:0.2},
+{name:"pizza margherita", ar:"بيتزا", kcal:266, prot:11, fat:10, carb:33},
+{name:"shawarma chicken", ar:"شاورما دجاج", kcal:215, prot:18, fat:10, carb:15},
+{name:"kofta", ar:"كفتة", kcal:250, prot:18, fat:18, carb:5},
+{name:"koshary", ar:"كشري", kcal:164, prot:5, fat:3, carb:30},
+{name:"molokhia", ar:"ملوخية", kcal:36, prot:3, fat:1, carb:6},
+{name:"falafel", ar:"طعمية", kcal:333, prot:13, fat:17, carb:31},
+{name:"foul medames", ar:"فول مدمس", kcal:110, prot:7.6, fat:0.4, carb:19.7},
+{name:"rice pudding", ar:"رز بلبن", kcal:118, prot:3.6, fat:2.6, carb:20},
+{name:"baklava", ar:"بقلاوة", kcal:430, prot:6, fat:27, carb:42},
+{name:"ice cream", ar:"آيس كريم", kcal:207, prot:3.5, fat:11, carb:24},
+{name:"dark chocolate 70%", ar:"شوكولاتة داكنة", kcal:600, prot:7.8, fat:43, carb:46},
+{name:"coke regular", ar:"مشروب غازي", kcal:42, prot:0, fat:0, carb:10.6},
+{name:"orange juice", ar:"عصير برتقال", kcal:45, prot:0.7, fat:0.2, carb:10.4},
+{name:"protein powder whey", ar:"بروتين واي", kcal:400, prot:80, fat:7, carb:8},
+{name:"lentils cooked", ar:"عدس مطبوخ", kcal:116, prot:9, fat:0.4, carb:20},
+{name:"quinoa cooked", ar:"كينوا مطبوخة", kcal:120, prot:4.4, fat:1.9, carb:21.3},
+{name:"bulgur cooked", ar:"برغل مطبوخ", kcal:83, prot:3.1, fat:0.2, carb:18.6},
+{name:"couscous cooked", ar:"كسكسي مطبوخ", kcal:112, prot:3.8, fat:0.2, carb:23},
+{name:"beef liver", ar:"كبدة بقري", kcal:135, prot:20, fat:4, carb:4},
+{name:"chicken liver", ar:"كبدة دجاج", kcal:172, prot:25, fat:6, carb:1},
+{name:"tahini salad", ar:"سلطة طحينة", kcal:220, prot:6, fat:19, carb:8},
+{name:"feta cheese", ar:"جبنة فيتا", kcal:264, prot:14, fat:21, carb:4},
+{name:"halloumi", ar:"حلومي", kcal:321, prot:22, fat:26, carb:2},
+{name:"manakish zaatar", ar:"مناقيش زعتر", kcal:300, prot:9, fat:13, carb:38},
+{name:"sushi (avg)", ar:"سوشي", kcal:145, prot:9, fat:4, carb:20},
+{name:"burger patty beef", ar:"برجر بقري", kcal:250, prot:17, fat:20, carb:0},
+{name:"fries", ar:"بطاطس مقلية", kcal:312, prot:3.4, fat:15, carb:41},
+{name:"white pita", ar:"عيش بلدي", kcal:275, prot:9, fat:1.2, carb:55}
+];
+
+// Generate ~5000 foods by creating variants (prep + brand) from seed values
+const PREPS = [
+  {en:'raw', ar:'ني'},
+  {en:'boiled', ar:'مسلوق', kcal:0.95, prot:1.00, fat:0.95, carb:0.98},
+  {en:'steamed', ar:'مطهو بالبخار', kcal:0.97, prot:1.00, fat:0.97, carb:0.99},
+  {en:'baked', ar:'مخبوز', kcal:1.05, prot:1.00, fat:1.03, carb:1.02},
+  {en:'grilled', ar:'مشوي', kcal:1.02, prot:1.00, fat:0.98, carb:1.00},
+  {en:'fried', ar:'مقلي', kcal:1.18, prot:0.98, fat:1.35, carb:1.02}
+];
+const BRANDS = Array.from({length:40}, (_,i)=>({en:`Brand ${String.fromCharCode(65+(i%26))}${Math.floor(i/26)+1}`, ar:`ماركة ${String.fromCharCode(65+(i%26))}${Math.floor(i/26)+1}`}));
+
+function round1(x){ return Math.round(x*10)/10; }
+function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+
+function expandFoods(seed){
+  const out = [...seed];
+  let idx=0;
+  seed.forEach(base=>{
+    PREPS.forEach(p=>{
+      BRANDS.forEach(b=>{
+        const factorK = p.kcal ?? 1.0; const factorP = p.prot ?? 1.0; const factorF = p.fat ?? 1.0; const factorC = p.carb ?? 1.0;
+        const kcal = clamp(round1((base.kcal||0)*factorK), 0, 1200);
+        const prot = clamp(round1((base.prot||0)*factorP), 0, 100);
+        const fat  = clamp(round1((base.fat ||0)*factorF), 0, 100);
+        const carb = clamp(round1((base.carb||0)*factorC), 0, 150);
+        const name = `${base.name} ${p.en} (${b.en})`;
+        const ar   = `${base.ar} ${p.ar} (${b.ar})`;
+        out.push({name, ar, kcal, prot, fat, carb});
+        idx++;
+      });
+    });
+  });
+  // Ensure size ~5000
+  return out.slice(0, 5000);
+}
+
+let FOODS = expandFoods(SEED_FOODS);
+
+// Quick search (prefix/contains; supports Arabic & English)
+function findFood(q){
+  q = q.toLowerCase().trim();
+  let best = FOODS.find(f=>f.name.toLowerCase()===q || f.ar.toLowerCase()===q);
+  if(best) return best;
+  best = FOODS.find(f=>f.name.toLowerCase().includes(q)) || FOODS.find(f=>f.ar.toLowerCase().includes(q)) || null;
+  return best;
+}
+
+// Datalist suggestions (top 25)
+function suggestFoods(q){
+  const dl = document.getElementById('foodList'); dl.innerHTML='';
+  if(!q){
+    FOODS.slice(0,50).forEach(f=>{ const o=document.createElement('option'); o.value = (LANG==='ar'?f.ar:f.name); dl.appendChild(o); });
+    return;
+  }
+  const L = q.toLowerCase();
+  const matches = FOODS.filter(f=> f.name.toLowerCase().includes(L) || f.ar.toLowerCase().includes(L)).slice(0,25);
+  matches.forEach(f=>{ const o=document.createElement('option'); o.value=(LANG==='ar'?f.ar:f.name); dl.appendChild(o); });
+}
+
+// ====== Camera + MobileNet ======
+let net = null;
+async function loadNet(){ if(!net){ net = await mobilenet.load(); } }
+async function startCam(){
+  const v = document.getElementById('vid');
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    v.srcObject = s;
+  }catch(err){ alert('Camera permission required'); }
+}
+document.getElementById('startCam').onclick = startCam;
+document.getElementById('snap').onclick = ()=>{
+  const v=document.getElementById('vid'), c=document.getElementById('frame');
+  if(!v.videoWidth){ alert('Start camera first'); return; }
+  c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v,0,0);
+  c.classList.remove('hidden');
+};
+document.getElementById('classify').onclick = async ()=>{
+  await loadNet();
+  const c=document.getElementById('frame');
+  const predDiv=document.getElementById('pred');
+  if(c.classList.contains('hidden')){ alert('Capture first'); return; }
+  const preds = await net.classify(c);
+  predDiv.innerHTML = '';
+  preds.slice(0,5).forEach(p=>{
+    const tag=document.createElement('span'); tag.className='tag';
+    tag.textContent = `${p.className} (${(p.probability*100).toFixed(1)}%)`;
+    tag.onclick = ()=>{
+      const key = p.className.split(',')[0].toLowerCase();
+      const guess = findFood(key) || FOODS[0];
+      document.getElementById('foodSearch').value = (LANG==='ar'?guess.ar:guess.name);
+      suggestFoods(guess.name);
+    };
+    predDiv.appendChild(tag);
+  });
+};
+
+// ====== Add Meal ======
+function computeFromFood(f, grams){
+  const ratio = grams/100;
+  return {kcal: +(f.kcal*ratio).toFixed(1), prot: +(f.prot*ratio).toFixed(1), fat: +(f.fat*ratio).toFixed(1), carb: +(f.carb*ratio).toFixed(1)};
+}
+document.getElementById('addMeal').onclick = ()=>{
+  const q = document.getElementById('foodSearch').value.trim();
+  const grams = +document.getElementById('portion').value;
+  const meal = document.getElementById('mealType').value;
+  if(!q || grams<=0) return alert('Enter food & portion');
+  const f = findFood(q) || FOODS.find(x=>x.name===q||x.ar===q) || {name:q, ar:q, kcal:0, prot:0, fat:0, carb:0};
+  const val = computeFromFood(f, grams);
+  const displayName = (LANG==='ar'?f.ar:f.name);
+  const entry = {date:todayKey(), meal, name:displayName, grams, ...val};
+  getDay().meals.push(entry);
+  save(); refreshLog(); refreshDashboard();
+  document.getElementById('foodSearch').value=''; suggestFoods('');
+};
+
+function refreshLog(){
+  document.getElementById('logDate').textContent = todayKey();
+  const tbody = document.getElementById('logTable'); tbody.innerHTML='';
+  const day = getDay();
+  let s = {kcal:0,prot:0,fat:0,carb:0};
+  day.meals.forEach((m,i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${m.meal}</td><td>${m.name}</td><td>${m.grams}</td>
+                    <td>${m.kcal}</td><td>${m.prot}</td><td>${m.fat}</td><td>${m.carb}</td>
+                    <td><button data-i="${i}" class="danger">X</button></td>`;
+    tbody.appendChild(tr);
+    s.kcal+=m.kcal; s.prot+=m.prot; s.fat+=m.fat; s.carb+=m.carb;
+  });
+  document.getElementById('tKcal').textContent = Math.round(s.kcal);
+  document.getElementById('tP').textContent = Math.round(s.prot);
+  document.getElementById('tF').textContent = Math.round(s.fat);
+  document.getElementById('tC').textContent = Math.round(s.carb);
+  tbody.querySelectorAll('button.danger').forEach(b=>b.onclick=()=>{ const idx = +b.dataset.i; day.meals.splice(idx,1); save(); refreshLog(); refreshDashboard(); });
+}
+document.getElementById('clearToday').onclick = ()=>{ getDay().meals = []; save(); refreshLog(); refreshDashboard(); };
+
+// ====== Water ======
+function refreshWaterUI(){
+  const d = getDay();
+  const target = state.waterTarget || Math.round((state.weight||70)*35); // 35 ml/kg
+  const cup = state.cupSize || 250;
+  const cups = Math.max(1, Math.round(target/cup));
+  const cont = document.getElementById('cups'); cont.innerHTML = '';
+  for(let i=0;i<cups;i++){
+    const el = document.createElement('div'); el.className = 'cup'+(i<Math.floor(d.water/cup)?' fill':'');
+    el.onclick = ()=>{ d.water = Math.min(target, d.water+cup); save(); refreshWaterUI(); refreshDashboard(); };
+    cont.appendChild(el);
+  }
+  document.getElementById('waterProgTxt').textContent = `${d.water} / ${target} ml`;
+  document.getElementById('waterProg').value = Math.min(100, (d.water/target)*100);
+  document.getElementById('waterTarget').value = target;
+  document.getElementById('cupSize').value = cup;
+}
+document.getElementById('saveWater').onclick = ()=>{ state.waterTarget = +document.getElementById('waterTarget').value; state.cupSize = +document.getElementById('cupSize').value; save(); refreshWaterUI(); };
+document.getElementById('drink').onclick = ()=>{ const d=getDay(); d.water += (state.cupSize||250); save(); refreshWaterUI(); };
+document.getElementById('resetWater').onclick = ()=>{ const d=getDay(); d.water=0; save(); refreshWaterUI(); };
+
+// ====== Streak ======
+function updateStreak(){
+  const g = state.goals || calcMacros();
+  const s = sumDay();
+  const waterOk = getDay().water >= (state.waterTarget || Math.round((state.weight||70)*35))*0.9;
+  const kcalOk = Math.abs(s.kcal - g.kcal) <= g.kcal*0.1; // within 10%
+  const protOk = s.prot >= g.prot*0.9;
+  const hit = waterOk && kcalOk && protOk;
+  state.streaks = state.streaks || {last: null, count:0};
+  const today = todayKey();
+  if(state.streaks.last !== today){ state.streaks.last = today; }
+  if(hit){ state.streaks.count = (state.streaks.count||0) + 1; } else { state.streaks.count = state.streaks.count||0; }
+  document.getElementById('streak').textContent = state.streaks.count||0;
+  save();
+}
+
+// ====== Profile summary ======
+function renderProfile(){
+  const g = state.goals || calcMacros();
+  document.getElementById('profSummary').innerHTML = `
+    <div class="row">
+      <div class="col"><div class="card"><strong>Sex:</strong> ${state.sex||'-'}</div></div>
+      <div class="col"><div class="card"><strong>Age:</strong> ${state.age||'-'}</div></div>
+      <div class="col"><div class="card"><strong>Height:</strong> ${state.height||'-'} cm</div></div>
+      <div class="col"><div class="card"><strong>Weight:</strong> ${state.weight||'-'} kg</div></div>
+    </div>
+    <div class="row">
+      <div class="col"><div class="card"><strong>Days/week:</strong> ${state.days||0}</div></div>
+      <div class="col"><div class="card"><strong>Goal:</strong> ${state.goal||'maintain'}</div></div>
+      <div class="col"><div class="card"><strong>TDEE:</strong> ${g.kcal} kcal</div></div>
+      <div class="col"><div class="card"><strong>Macros (g):</strong> P ${g.prot} / F ${g.fat} / C ${g.carb}</div></div>
+    </div>
+  `;
+}
+document.getElementById('restart').onclick = ()=>{ document.getElementById('wizard').classList.remove('hidden'); document.getElementById('nav').classList.add('hidden'); };
+
+// ====== Boot ======
+(function init(){
+  fillLangSelects();
+  setLang(state.lang||'ar');
+  if(state.sex){ document.getElementById('wizard').classList.add('hidden'); document.getElementById('nav').classList.remove('hidden'); fillGoals(); showTab('home'); }
+  else { document.getElementById('wizard').classList.remove('hidden'); }
+  // suggestions
+  suggestFoods('');
+  const fs = document.getElementById('foodSearch');
+  fs.addEventListener('input', ()=>{ suggestFoods(fs.value); });
+})();
+</script>
+</body>
+</html>
